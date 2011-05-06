@@ -48,25 +48,16 @@ using namespace v8;
 // Evil macrology 
 
 #define LEAVE_VIA_EXCEPTION(msg) \
- return ThrowException(Exception::Error(String::new(msg)));
+ return ThrowException(Exception::Error(String::New(msg)));
 
 #define BAIL_IF_NOT_N_ARGS(nargs,msg) \
-{ \
- if (args.Length() != nargs) { \
+ if (args.Length() != nargs) \
    LEAVE_VIA_EXCEPTION(msg);
- } \
-}
 
 #define COERCE_OR_BAIL_STR_ARG(narg,varname,humanlabel) \
-{ \
- if (!args[narg]->IsString()) { \
+ if (!args[narg]->IsString()) \
    LEAVE_VIA_EXCEPTION(humanlabel " needs to be a string"); \
- } \
- else { \
-   String::Utf8Value ts(args[narg]->ToString()); \
-   varname = ts; \
- } \
-}
+ std::string varname((const char *)(new String::Utf8Value(args[narg]->ToString())));
 
 Handle<Value>
 nacl_sign_keypair(const Arguments &args)
@@ -77,8 +68,8 @@ nacl_sign_keypair(const Arguments &args)
   pk = crypto_sign_keypair(&sk);
 
   Local<Object> ret = Object::New();
-  ret->Set(String::New("sk"), String::New(sk));
-  ret->Set(String::New("pk"), String::New(pk));
+  ret->Set(String::New("sk"), String::New(sk.c_str()));
+  ret->Set(String::New("pk"), String::New(pk.c_str()));
   return scope.Close(ret);
 }
 
@@ -100,7 +91,7 @@ nacl_sign(const Arguments &args)
     LEAVE_VIA_EXCEPTION(s);
   }
 
-  Local<String> ret = String::New(sm);
+  Local<String> ret = String::New(sm.c_str());
   return scope.Close(ret);
 }
 
@@ -109,12 +100,11 @@ nacl_sign_open(const Arguments &args)
 {
   HandleScope scope;
 
-  std::string sm, pk;
-
   BAIL_IF_NOT_N_ARGS(2, "Need 2 string args: signed_message, public_key");
   COERCE_OR_BAIL_STR_ARG(0, sm, "signed_message");
   COERCE_OR_BAIL_STR_ARG(1, pk, "public_key");
 
+  std::string m;
   try {
     m = crypto_sign_open(sm, pk);
   }
@@ -122,7 +112,7 @@ nacl_sign_open(const Arguments &args)
     LEAVE_VIA_EXCEPTION(s);
   }
 
-  Local<String> ret = String::New(m);
+  Local<String> ret = String::New(m.c_str());
   return scope.Close(ret);
 }
 
@@ -139,6 +129,7 @@ extern "C" void init(Handle<Object> target)
               FunctionTemplate::New(nacl_sign)->GetFunction());
   target->Set(String::New("sign_open"),
               FunctionTemplate::New(nacl_sign_open)->GetFunction());
+
   /*
   target->Set(String::New("box_keypair"),
               FunctionTemplate::New(nacl_box_keypair)->GetFunction());
@@ -147,6 +138,8 @@ extern "C" void init(Handle<Object> target)
   target->Set(String::New("box_open"),
               FunctionTemplate::New(nacl_box_open)->GetFunction());
 
+  target->Set(String::New("randombytes"),
+              FunctionTemplate::New(nacl_randombytes)->GetFunction());
   target->Set(String::New("box_random_nonce"),
               FunctionTemplate::New(nacl_box_random_nonce)->GetFunction());
   */
