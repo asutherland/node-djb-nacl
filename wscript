@@ -37,8 +37,21 @@ def build(bld):
   ## free to fix this deficiency.
 
   obj = bld.new_task_gen('cxx', 'shlib', 'node_addon')
-  obj.target = 'nacl_node'
+  obj.target = 'nacl'
   obj.source = 'src/nacl_node.cc'
   obj.includes = [libnacl_inc_dir]
-  obj.libpath = [libnacl_lib_dir]
-  obj.uselib = 'nacl'
+  obj.libpath = [os.path.join('..', libnacl_lib_dir)]
+  obj.staticlib = 'nacl'
+
+# We are cribbing this from bcrypt's shutdown because it's not clear to me
+# how we otherwise would get our lib in here...
+def shutdown():
+  import Options
+  from os import unlink, symlink
+  from os.path import exists, islink
+  t = 'nacl.node'
+  if Options.commands['clean']:
+    if exists(t): unlink(t)
+  if Options.commands['build']:
+    if exists('build/default/' + t) and not exists(t):
+      symlink('build/default/' + t, t)

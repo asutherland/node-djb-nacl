@@ -1,0 +1,19 @@
+{
+  "name": "nacl",
+  "description": "Node packaging of the NaCl crypto lib (not native client!)",
+  "version": "0.0.1",
+  "author": "Andrew Sutherland <asutherland@asutherland.org> (http://github.com/asutherland)",
+  "licenses": [
+    { "type": "GPL" },
+    { "type": "LGPL" },
+    { "type": "MPL" }
+  ],
+  "main": "./nacl",
+  "scripts": {
+    "install": "node-waf configure build",
+    "test": "node-waf configure build; nodeunit test/"
+  },
+  "dependencies": {
+    "nodeunit": ">= 0.5.1"
+  }
+}

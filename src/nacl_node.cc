@@ -38,6 +38,7 @@
 
 #include <v8.h>
 
+#include "randombytes.h"
 #include "crypto_box.h"
 #include "crypto_sign.h"
 
@@ -58,6 +59,12 @@ using namespace v8;
  if (!args[narg]->IsString()) \
    LEAVE_VIA_EXCEPTION(humanlabel " needs to be a string"); \
  std::string varname((const char *)(new String::Utf8Value(args[narg]->ToString())));
+
+#define COERCE_OR_BAIL_ULL_ARG(narg,varname,humanlabel) \
+ if (!args[narg]->IsUint32()) \
+   LEAVE_VIA_EXCEPTION(humanlabel " needs to be a uint32"); \
+ unsigned long long varname(args[narg]->Uint32Value());
+
 
 Handle<Value>
 nacl_sign_keypair(const Arguments &args)
@@ -116,6 +123,104 @@ nacl_sign_open(const Arguments &args)
   return scope.Close(ret);
 }
 
+Handle<Value>
+nacl_box_keypair(const Arguments &args)
+{
+  HandleScope scope;
+
+  std::string pk, sk;
+  pk = crypto_box_keypair(&sk);
+
+  Local<Object> ret = Object::New();
+  ret->Set(String::New("sk"), String::New(sk.c_str()));
+  ret->Set(String::New("pk"), String::New(pk.c_str()));
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_box(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(4, "Need 4 string args: message, nonce, pubkey, secretkey");
+  COERCE_OR_BAIL_STR_ARG(0, m, "message");
+  COERCE_OR_BAIL_STR_ARG(1, n, "nonce");
+  COERCE_OR_BAIL_STR_ARG(2, pk, "public_key");
+  COERCE_OR_BAIL_STR_ARG(3, sk, "secret_key");
+
+  std::string c;
+
+  try {
+    c = crypto_box(m, n, pk, sk);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_EXCEPTION(s);
+  }
+
+  Local<String> ret = String::New(c.c_str());
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_box_open(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(2,
+                     "Need 4 string args: ciphertext, nonce, pubkey, secretkey");
+  COERCE_OR_BAIL_STR_ARG(0, c, "ciphertext_message");
+  COERCE_OR_BAIL_STR_ARG(1, n, "nonce");
+  COERCE_OR_BAIL_STR_ARG(2, pk, "public_key");
+  COERCE_OR_BAIL_STR_ARG(3, sk, "secret_key");
+
+  std::string m;
+  try {
+    m = crypto_box_open(c, n, pk, sk);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_EXCEPTION(s);
+  }
+
+  Local<String> ret = String::New(m.c_str());
+  return scope.Close(ret);
+}
+
+
+/** Maximum number of random bytes the user can request in a go. */
+#define MAX_RANDOM_BYTES 256
+
+Handle<Value>
+nacl_randombytes(const Arguments &args)
+{
+  HandleScope scope;
+  char buf[MAX_RANDOM_BYTES];
+
+  BAIL_IF_NOT_N_ARGS(1, "Need 1 numeric arg: number of random bytes");
+  COERCE_OR_BAIL_ULL_ARG(0, numbytes, "num_random_bytes");
+
+  if (numbytes >= MAX_RANDOM_BYTES)
+    LEAVE_VIA_EXCEPTION("You want too many random bytes!");
+
+  randombytes(reinterpret_cast<unsigned char *>(&buf), numbytes);
+  Local<String> ret = String::New(buf);
+
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_box_random_nonce(const Arguments &args)
+{
+  HandleScope scope;
+  char buf[crypto_box_NONCEBYTES];
+
+  BAIL_IF_NOT_N_ARGS(0, "No arguments required/supported");
+
+  randombytes(reinterpret_cast<unsigned char *>(&buf), crypto_box_NONCEBYTES);
+  Local<String> ret = String::New(buf);
+
+  return scope.Close(ret);
+}
+
 
 // crypto_box_NONCEBYTES
 
@@ -130,7 +235,6 @@ extern "C" void init(Handle<Object> target)
   target->Set(String::New("sign_open"),
               FunctionTemplate::New(nacl_sign_open)->GetFunction());
 
-  /*
   target->Set(String::New("box_keypair"),
               FunctionTemplate::New(nacl_box_keypair)->GetFunction());
   target->Set(String::New("box"),
@@ -142,5 +246,4 @@ extern "C" void init(Handle<Object> target)
               FunctionTemplate::New(nacl_randombytes)->GetFunction());
   target->Set(String::New("box_random_nonce"),
               FunctionTemplate::New(nacl_box_random_nonce)->GetFunction());
-  */
 };
