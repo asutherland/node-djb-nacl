@@ -39,6 +39,8 @@ def build(bld):
   obj = bld.new_task_gen('cxx', 'shlib', 'node_addon')
   obj.target = 'nacl'
   obj.source = 'src/nacl_node.cc'
+  print dir(obj)
+  obj.add_obj_file(os.path.join(libnacl_lib_dir, 'randombytes.o'))
   obj.includes = [libnacl_inc_dir]
   obj.libpath = [os.path.join('..', libnacl_lib_dir)]
   obj.staticlib = 'nacl'

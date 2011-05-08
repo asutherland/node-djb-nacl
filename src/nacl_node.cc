@@ -35,8 +35,12 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include <string.h>
 
 #include <v8.h>
+
+#include <node.h>
+#include <node_buffer.h>
 
 #include "randombytes.h"
 #include "crypto_box.h"
@@ -45,6 +49,7 @@
 #include "nacl_node.h"
 
 using namespace v8;
+using namespace node;
 
 // Evil macrology 
 
@@ -55,16 +60,86 @@ using namespace v8;
  if (args.Length() != nargs) \
    LEAVE_VIA_EXCEPTION(msg);
 
-#define COERCE_OR_BAIL_STR_ARG(narg,varname,humanlabel) \
- if (!args[narg]->IsString()) \
-   LEAVE_VIA_EXCEPTION(humanlabel " needs to be a string"); \
- std::string varname((const char *)(new String::Utf8Value(args[narg]->ToString())));
+/**
+ * Convert a JS string used for message bytes (like an English or CJK message,
+ *  meaning more than just ASCII) to a std::string holding utf8-encoded data.
+ *
+ * Defines a variable `varname` as a byproduct.
+ *
+ * @param narg The index of the argument.
+ * @param varname The name of the variable to define and which to place the
+ *                result value in.
+ * @param humanlabel The name to use for the variable when throwing an exception
+ *                   if the provided value is no good.
+ */
+#define COERCE_OR_BAIL_STR_ARG(narg,varname,humanlabel)      \
+  if (!args[narg]->IsString())                               \
+    LEAVE_VIA_EXCEPTION(humanlabel " needs to be a string"); \
+  String::Utf8Value utf8_##varname(args[narg]);              \
+  std::string varname(*utf8_##varname);
 
+/**
+ * Convert a JS string/buffer used for binary bytes (such as random bytes,
+ *  crypto keys, and signed/encrypted messages) to a std::string holding
+ *  binary-encoded data.
+ *
+ * Defines a variable `varname` as a byproduct.
+ *
+ * @param narg The index of the argument.
+ * @param varname The name of the variable to define and which to place the
+ *                result value in.
+ * @param humanlabel The name to use for the variable when throwing an exception
+ *                   if the provided value is no good.
+ */
+#define COERCE_OR_BAIL_BIN_STR_ARG(narg,varname,humanlabel)     \
+  std::string varname;                                          \
+  if (Buffer::HasInstance(args[narg])) {                        \
+    v8::Handle<v8::Object> t##varname = args[narg]->ToObject(); \
+    varname.replace(0, 0, Buffer::Data(t##varname),             \
+                    Buffer::Length(t##varname));                \
+  }                                                             \
+  else if (args[narg]->IsString()) {                            \
+    unsigned long nbytes = DecodeBytes(args[narg], BINARY);     \
+    char *bytes = new char[nbytes];                             \
+    DecodeWrite(bytes, nbytes, args[narg], BINARY);             \
+    varname.replace(0, 0, bytes, nbytes);                       \
+    delete[] bytes;                                             \
+  }                                                             \
+  else                                                          \
+    LEAVE_VIA_EXCEPTION(humanlabel " needs to be a binary string or buffer")
+
+/**
+ * Converts a JS numeric argument to an unsigned long long.  Because we are not
+ *  fancy and don't actually need the expressive range, we require that the
+ *  argument needs to be a uint32.
+ *
+ * Defines a variable `varname` as a byproduct.
+ *
+ * @param narg The index of the argument.
+ * @param varname The name of the variable to define and which to place the
+ *                result value in.
+ * @param humanlabel The name to use for the variable when throwing an exception
+ *                   if the provided value is no good.
+ */
 #define COERCE_OR_BAIL_ULL_ARG(narg,varname,humanlabel) \
  if (!args[narg]->IsUint32()) \
    LEAVE_VIA_EXCEPTION(humanlabel " needs to be a uint32"); \
- unsigned long long varname(args[narg]->Uint32Value());
+ unsigned long long varname(args[narg]->Uint32Value())
 
+/**
+ * Expression to return binary bytes from the std::string `strvar`.
+ */
+#define PREP_BIN_STR(strvar) \
+  Encode(strvar.data(), strvar.length(), BINARY)
+
+/**
+ * Define a local `ret` to hold binary bytes from the std::string strvar.
+ */
+#define PREP_BIN_STR_FOR_RETURN(strvar) \
+  Local<Value> ret = Encode(strvar.data(), strvar.length(), BINARY)
+
+#define PREP_BIN_CHARS_FOR_RETURN(cbuf, clen) \
+  Local<Value> ret = Encode(cbuf, clen)
 
 Handle<Value>
 nacl_sign_keypair(const Arguments &args)
@@ -75,8 +150,8 @@ nacl_sign_keypair(const Arguments &args)
   pk = crypto_sign_keypair(&sk);
 
   Local<Object> ret = Object::New();
-  ret->Set(String::New("sk"), String::New(sk.c_str()));
-  ret->Set(String::New("pk"), String::New(pk.c_str()));
+  ret->Set(String::New("sk"), PREP_BIN_STR(sk));
+  ret->Set(String::New("pk"), PREP_BIN_STR(pk));
   return scope.Close(ret);
 }
 
@@ -87,7 +162,7 @@ nacl_sign(const Arguments &args)
 
   BAIL_IF_NOT_N_ARGS(2, "Need 2 string args: message, secretkey");
   COERCE_OR_BAIL_STR_ARG(0, m, "message");
-  COERCE_OR_BAIL_STR_ARG(1, sk, "secretkey");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, sk, "secretkey");
 
   std::string sm;
 
@@ -98,7 +173,7 @@ nacl_sign(const Arguments &args)
     LEAVE_VIA_EXCEPTION(s);
   }
 
-  Local<String> ret = String::New(sm.c_str());
+  PREP_BIN_STR_FOR_RETURN(sm);
   return scope.Close(ret);
 }
 
@@ -108,8 +183,15 @@ nacl_sign_open(const Arguments &args)
   HandleScope scope;
 
   BAIL_IF_NOT_N_ARGS(2, "Need 2 string args: signed_message, public_key");
-  COERCE_OR_BAIL_STR_ARG(0, sm, "signed_message");
-  COERCE_OR_BAIL_STR_ARG(1, pk, "public_key");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, sm, "signed_message");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, pk, "public_key");
+
+  // IMPORTANT!  nacl does not validate the size of 'sm' itself and is
+  //  vulnerable to a crash-inducing unsigned wraparound.  So we explode
+  //  for any input that is less than the minimum message size.
+  if (sm.length() < crypto_sign_BYTES)
+    LEAVE_VIA_EXCEPTION(
+      "message is smaller than the minimum signed message size");
 
   std::string m;
   try {
@@ -119,7 +201,7 @@ nacl_sign_open(const Arguments &args)
     LEAVE_VIA_EXCEPTION(s);
   }
 
-  Local<String> ret = String::New(m.c_str());
+  PREP_BIN_STR_FOR_RETURN(m);
   return scope.Close(ret);
 }
 
@@ -132,8 +214,8 @@ nacl_box_keypair(const Arguments &args)
   pk = crypto_box_keypair(&sk);
 
   Local<Object> ret = Object::New();
-  ret->Set(String::New("sk"), String::New(sk.c_str()));
-  ret->Set(String::New("pk"), String::New(pk.c_str()));
+  ret->Set(String::New("sk"), PREP_BIN_STR(sk));
+  ret->Set(String::New("pk"), PREP_BIN_STR(pk));
   return scope.Close(ret);
 }
 
@@ -142,11 +224,11 @@ nacl_box(const Arguments &args)
 {
   HandleScope scope;
 
-  BAIL_IF_NOT_N_ARGS(4, "Need 4 string args: message, nonce, pubkey, secretkey");
+  BAIL_IF_NOT_N_ARGS(4, "Need 4 args: message, nonce, pubkey, secretkey");
   COERCE_OR_BAIL_STR_ARG(0, m, "message");
-  COERCE_OR_BAIL_STR_ARG(1, n, "nonce");
-  COERCE_OR_BAIL_STR_ARG(2, pk, "public_key");
-  COERCE_OR_BAIL_STR_ARG(3, sk, "secret_key");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, n, "nonce");
+  COERCE_OR_BAIL_BIN_STR_ARG(2, pk, "public_key");
+  COERCE_OR_BAIL_BIN_STR_ARG(3, sk, "secret_key");
 
   std::string c;
 
@@ -157,7 +239,7 @@ nacl_box(const Arguments &args)
     LEAVE_VIA_EXCEPTION(s);
   }
 
-  Local<String> ret = String::New(c.c_str());
+  PREP_BIN_STR_FOR_RETURN(c);
   return scope.Close(ret);
 }
 
@@ -166,12 +248,12 @@ nacl_box_open(const Arguments &args)
 {
   HandleScope scope;
 
-  BAIL_IF_NOT_N_ARGS(2,
-                     "Need 4 string args: ciphertext, nonce, pubkey, secretkey");
-  COERCE_OR_BAIL_STR_ARG(0, c, "ciphertext_message");
-  COERCE_OR_BAIL_STR_ARG(1, n, "nonce");
-  COERCE_OR_BAIL_STR_ARG(2, pk, "public_key");
-  COERCE_OR_BAIL_STR_ARG(3, sk, "secret_key");
+  BAIL_IF_NOT_N_ARGS(4,
+                     "Need 4 args: ciphertext, nonce, pubkey, secretkey");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, c, "ciphertext_message");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, n, "nonce");
+  COERCE_OR_BAIL_BIN_STR_ARG(2, pk, "public_key");
+  COERCE_OR_BAIL_BIN_STR_ARG(3, sk, "secret_key");
 
   std::string m;
   try {
@@ -181,7 +263,7 @@ nacl_box_open(const Arguments &args)
     LEAVE_VIA_EXCEPTION(s);
   }
 
-  Local<String> ret = String::New(m.c_str());
+  PREP_BIN_STR_FOR_RETURN(m);
   return scope.Close(ret);
 }
 
@@ -202,8 +284,8 @@ nacl_randombytes(const Arguments &args)
     LEAVE_VIA_EXCEPTION("You want too many random bytes!");
 
   randombytes(reinterpret_cast<unsigned char *>(&buf), numbytes);
-  Local<String> ret = String::New(buf);
 
+  PREP_BIN_CHARS_FOR_RETURN(buf, numbytes);
   return scope.Close(ret);
 }
 
@@ -216,8 +298,8 @@ nacl_box_random_nonce(const Arguments &args)
   BAIL_IF_NOT_N_ARGS(0, "No arguments required/supported");
 
   randombytes(reinterpret_cast<unsigned char *>(&buf), crypto_box_NONCEBYTES);
-  Local<String> ret = String::New(buf);
 
+  PREP_BIN_CHARS_FOR_RETURN(buf, sizeof(buf)/sizeof(buf[0]));
   return scope.Close(ret);
 }
 
@@ -228,22 +310,14 @@ extern "C" void init(Handle<Object> target)
 {
   HandleScope scope;
 
-  target->Set(String::New("sign_keypair"),
-              FunctionTemplate::New(nacl_sign_keypair)->GetFunction());
-  target->Set(String::New("sign"),
-              FunctionTemplate::New(nacl_sign)->GetFunction());
-  target->Set(String::New("sign_open"),
-              FunctionTemplate::New(nacl_sign_open)->GetFunction());
+  NODE_SET_METHOD(target, "sign_keypair", nacl_sign_keypair);
+  NODE_SET_METHOD(target, "sign", nacl_sign);
+  NODE_SET_METHOD(target, "sign_open", nacl_sign_open);
 
-  target->Set(String::New("box_keypair"),
-              FunctionTemplate::New(nacl_box_keypair)->GetFunction());
-  target->Set(String::New("box"),
-              FunctionTemplate::New(nacl_box)->GetFunction());
-  target->Set(String::New("box_open"),
-              FunctionTemplate::New(nacl_box_open)->GetFunction());
+  NODE_SET_METHOD(target, "box_keypair", nacl_box_keypair);
+  NODE_SET_METHOD(target, "box", nacl_box);
+  NODE_SET_METHOD(target, "box_open", nacl_box_open);
 
-  target->Set(String::New("randombytes"),
-              FunctionTemplate::New(nacl_randombytes)->GetFunction());
-  target->Set(String::New("box_random_nonce"),
-              FunctionTemplate::New(nacl_box_random_nonce)->GetFunction());
+  NODE_SET_METHOD(target, "randombytes", nacl_randombytes);
+  NODE_SET_METHOD(target, "box_random_nonce", nacl_box_random_nonce);
 };
