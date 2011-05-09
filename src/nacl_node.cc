@@ -205,6 +205,33 @@ nacl_sign_open(const Arguments &args)
   return scope.Close(ret);
 }
 
+/**
+ * Let us see the payload of the signed blob before authenticating it.  This
+ *  allows us to use the contents to figure out what public key we should be
+ *  using to authenticate the blob, etc.  Obviously, for a malformed message
+ *  what you may get is gibberish.
+ */
+Handle<Value>
+nacl_sign_peek(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(1, "Need 1 string arg: signed_message");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, sm, "signed_message");
+
+  if (sm.length() < crypto_sign_BYTES)
+    LEAVE_VIA_EXCEPTION(
+      "message is smaller than the minimum signed message size");
+
+  // (We could just have sliced the input string without going to std::string
+  //  too.)
+  Local<Value> ret = Encode(sm.data() + crypto_sign_BYTES/2,
+                            sm.length() - crypto_sign_BYTES,
+                            BINARY);
+  return scope.Close(ret);
+}
+
+
 Handle<Value>
 nacl_box_keypair(const Arguments &args)
 {
@@ -313,11 +340,12 @@ extern "C" void init(Handle<Object> target)
   NODE_SET_METHOD(target, "sign_keypair", nacl_sign_keypair);
   NODE_SET_METHOD(target, "sign", nacl_sign);
   NODE_SET_METHOD(target, "sign_open", nacl_sign_open);
+  NODE_SET_METHOD(target, "sign_peek", nacl_sign_peek); // made-up-by-us
 
   NODE_SET_METHOD(target, "box_keypair", nacl_box_keypair);
   NODE_SET_METHOD(target, "box", nacl_box);
   NODE_SET_METHOD(target, "box_open", nacl_box_open);
 
   NODE_SET_METHOD(target, "randombytes", nacl_randombytes);
-  NODE_SET_METHOD(target, "box_random_nonce", nacl_box_random_nonce);
+  NODE_SET_METHOD(target, "box_random_nonce", nacl_box_random_nonce); // made-up
 };

@@ -28,6 +28,10 @@ exports.testSigning = function(test) {
   console.log("SIGNED", signed_message.length, hexify(signed_message));
   test.notEqual(message, signed_message);
 
+  var peeked_message = nacl.sign_peek(signed_message);
+  console.log("PEEKED", peeked_message.length, peeked_message);
+  test.equal(message, peeked_message);
+
   // Verify the (valid) signed message.
   var checked_message = nacl.sign_open(signed_message, keys.pk);
   console.log("OPENED", checked_message.length, checked_message);
