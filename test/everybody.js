@@ -65,12 +65,18 @@ exports.testSigning = function(test) {
   test.done();
 };
 
+function checkPublicKeyRoundTripOf(message, binaryMode, test) {
+  var boxer, unboxer;
+  if (binaryMode) {
+    boxer = nacl.box;
+    unboxer = nacl.box_open;
+  }
+  else {
+    boxer = nacl.box_utf8;
+    unboxer = nacl.box_open_utf8;
+  }
 
-/**
- * Test the public-key encryption and decryption using freshly generated keys
- * and nonces.
- */
-exports.testPublicKeyEncryption = function(test) {
+  console.log("===== Planning to encrypt: '" + message + "'");
   var sender_keys = nacl.box_keypair(),
       recip_keys = nacl.box_keypair();
   console.log('PK SENDER sk', sender_keys.sk.length, hexify(sender_keys.sk));
@@ -84,18 +90,31 @@ exports.testPublicKeyEncryption = function(test) {
   var nonce = nacl.box_random_nonce();
   console.log('NONCE', hexify(nonce));
 
-  var message = 'Hush hush, world!';
-
   console.log('BOX', message.length, message);
-  var boxed_message = nacl.box(message, nonce,
-                               recip_keys.pk, sender_keys.sk);
+  var boxed_message = boxer(message, nonce,
+                            recip_keys.pk, sender_keys.sk);
   console.log('BOXED', boxed_message.length, hexify(boxed_message));
   test.notEqual(message, boxed_message);
 
-  var unboxed_message = nacl.box_open(boxed_message, nonce,
-                                      sender_keys.pk, recip_keys.sk);
+  var unboxed_message = unboxer(boxed_message, nonce,
+                                sender_keys.pk, recip_keys.sk);
   console.log('UNBOX', unboxed_message.length, unboxed_message);
   test.equal(message, unboxed_message);
+}
+
+var ZEROES_8 = '\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000';
+var ZEROES_16 = ZEROES_8 + ZEROES_8;
+var ZEROES_64 = ZEROES_16 + ZEROES_16 + ZEROES_16 + ZEROES_16;
+
+/**
+ * Test the public-key encryption and decryption using freshly generated keys
+ * and nonces.
+ */
+exports.testPublicKeyEncryption = function(test) {
+  // Check that our round-trip actually works...
+  checkPublicKeyRoundTripOf('Hello World!', false, test);
+  // Check that we don't break on true binary strings...
+  checkPublicKeyRoundTripOf(ZEROES_64, true, test);
 
   // The gibberish / wrong keys thing does not make a lot of sense in the
   //  encryption case, so we don't bother.

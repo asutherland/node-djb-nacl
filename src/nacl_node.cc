@@ -135,6 +135,8 @@ using namespace node;
 /**
  * Define a local `ret` to hold binary bytes from the std::string strvar.
  */
+#define PREP_UTF8_STR_FOR_RETURN(strvar) \
+  Local<Value> ret = Encode(strvar.data(), strvar.length(), UTF8)
 #define PREP_BIN_STR_FOR_RETURN(strvar) \
   Local<Value> ret = Encode(strvar.data(), strvar.length(), BINARY)
 
@@ -252,6 +254,30 @@ nacl_box(const Arguments &args)
   HandleScope scope;
 
   BAIL_IF_NOT_N_ARGS(4, "Need 4 args: message, nonce, pubkey, secretkey");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, m, "message");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, n, "nonce");
+  COERCE_OR_BAIL_BIN_STR_ARG(2, pk, "public_key");
+  COERCE_OR_BAIL_BIN_STR_ARG(3, sk, "secret_key");
+
+  std::string c;
+
+  try {
+    c = crypto_box(m, n, pk, sk);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_EXCEPTION(s);
+  }
+
+  PREP_BIN_STR_FOR_RETURN(c);
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_box_utf8(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(4, "Need 4 args: message, nonce, pubkey, secretkey");
   COERCE_OR_BAIL_STR_ARG(0, m, "message");
   COERCE_OR_BAIL_BIN_STR_ARG(1, n, "nonce");
   COERCE_OR_BAIL_BIN_STR_ARG(2, pk, "public_key");
@@ -291,6 +317,30 @@ nacl_box_open(const Arguments &args)
   }
 
   PREP_BIN_STR_FOR_RETURN(m);
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_box_open_utf8(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(4,
+                     "Need 4 args: ciphertext, nonce, pubkey, secretkey");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, c, "ciphertext_message");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, n, "nonce");
+  COERCE_OR_BAIL_BIN_STR_ARG(2, pk, "public_key");
+  COERCE_OR_BAIL_BIN_STR_ARG(3, sk, "secret_key");
+
+  std::string m;
+  try {
+    m = crypto_box_open(c, n, pk, sk);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_EXCEPTION(s);
+  }
+
+  PREP_UTF8_STR_FOR_RETURN(m);
   return scope.Close(ret);
 }
 
@@ -344,7 +394,9 @@ extern "C" void init(Handle<Object> target)
 
   NODE_SET_METHOD(target, "box_keypair", nacl_box_keypair);
   NODE_SET_METHOD(target, "box", nacl_box);
+  NODE_SET_METHOD(target, "box_utf8", nacl_box_utf8);
   NODE_SET_METHOD(target, "box_open", nacl_box_open);
+  NODE_SET_METHOD(target, "box_open_utf8", nacl_box_open_utf8);
 
   NODE_SET_METHOD(target, "randombytes", nacl_randombytes);
   NODE_SET_METHOD(target, "box_random_nonce", nacl_box_random_nonce); // made-up
