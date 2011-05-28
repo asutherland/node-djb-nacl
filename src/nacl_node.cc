@@ -163,6 +163,28 @@ nacl_sign(const Arguments &args)
   HandleScope scope;
 
   BAIL_IF_NOT_N_ARGS(2, "Need 2 string args: message, secretkey");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, m, "message");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, sk, "secretkey");
+
+  std::string sm;
+
+  try {
+    sm = crypto_sign(m, sk);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_EXCEPTION(s);
+  }
+
+  PREP_BIN_STR_FOR_RETURN(sm);
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_sign_utf8(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(2, "Need 2 string args: message, secretkey");
   COERCE_OR_BAIL_STR_ARG(0, m, "message");
   COERCE_OR_BAIL_BIN_STR_ARG(1, sk, "secretkey");
 
@@ -207,6 +229,35 @@ nacl_sign_open(const Arguments &args)
   return scope.Close(ret);
 }
 
+Handle<Value>
+nacl_sign_open_utf8(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(2, "Need 2 string args: signed_message, public_key");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, sm, "signed_message");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, pk, "public_key");
+
+  // IMPORTANT!  nacl does not validate the size of 'sm' itself and is
+  //  vulnerable to a crash-inducing unsigned wraparound.  So we explode
+  //  for any input that is less than the minimum message size.
+  if (sm.length() < crypto_sign_BYTES)
+    LEAVE_VIA_EXCEPTION(
+      "message is smaller than the minimum signed message size");
+
+  std::string m;
+  try {
+    m = crypto_sign_open(sm, pk);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_EXCEPTION(s);
+  }
+
+  PREP_UTF8_STR_FOR_RETURN(m);
+  return scope.Close(ret);
+}
+
+
 /**
  * Let us see the payload of the signed blob before authenticating it.  This
  *  allows us to use the contents to figure out what public key we should be
@@ -230,6 +281,26 @@ nacl_sign_peek(const Arguments &args)
   Local<Value> ret = Encode(sm.data() + crypto_sign_BYTES/2,
                             sm.length() - crypto_sign_BYTES,
                             BINARY);
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_sign_peek_utf8(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(1, "Need 1 string arg: signed_message");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, sm, "signed_message");
+
+  if (sm.length() < crypto_sign_BYTES)
+    LEAVE_VIA_EXCEPTION(
+      "message is smaller than the minimum signed message size");
+
+  // (We could just have sliced the input string without going to std::string
+  //  too.)
+  Local<Value> ret = Encode(sm.data() + crypto_sign_BYTES/2,
+                            sm.length() - crypto_sign_BYTES,
+                            UTF8);
   return scope.Close(ret);
 }
 
@@ -392,10 +463,16 @@ extern "C" void init(Handle<Object> target)
   NODE_SET_METHOD(target, "sign_open", nacl_sign_open);
   NODE_SET_METHOD(target, "sign_peek", nacl_sign_peek); // made-up-by-us
 
+  NODE_SET_METHOD(target, "sign_utf8", nacl_sign);
+  NODE_SET_METHOD(target, "sign_open_utf8", nacl_sign_open);
+  NODE_SET_METHOD(target, "sign_peek_utf8", nacl_sign_peek); // made-up-by-us
+
+
   NODE_SET_METHOD(target, "box_keypair", nacl_box_keypair);
   NODE_SET_METHOD(target, "box", nacl_box);
-  NODE_SET_METHOD(target, "box_utf8", nacl_box_utf8);
   NODE_SET_METHOD(target, "box_open", nacl_box_open);
+
+  NODE_SET_METHOD(target, "box_utf8", nacl_box_utf8);
   NODE_SET_METHOD(target, "box_open_utf8", nacl_box_open_utf8);
 
   NODE_SET_METHOD(target, "randombytes", nacl_randombytes);

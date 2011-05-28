@@ -4,15 +4,34 @@ var $buf = require('buffer');
 //  assert's is much better.
 var assert = require('assert');
 
+// Use a bunch of zeroes as our binary string test as they are proven to screw
+//  us up in utf8 mode.
+var ZEROES_8 = '\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000';
+var ZEROES_16 = ZEROES_8 + ZEROES_8;
+var ZEROES_64 = ZEROES_16 + ZEROES_16 + ZEROES_16 + ZEROES_16;
+
+// XXX if we had non-ASCII messages tested, this would screw up as it needs to
+//  know whether to interpret as utf8 in that case...
 function hexify(bs) {
   var buf = new $buf.Buffer(bs, 'binary');
   return buf.toString('hex');
 }
 
-/**
- * Test the signature generation and verification using freshly generated keys.
- */
-exports.testSigning = function(test) {
+function checkSignatureOf(message, binaryMode, test) {
+  console.log("===== Planning to sign: '" + message + "' aka " +
+              hexify(message));
+  var signer, opener, peeker;
+  if (binaryMode) {
+    signer = nacl.sign;
+    opener = nacl.sign_open;
+    peeker = nacl.sign_peek;
+  }
+  else {
+    signer = nacl.sign_utf8;
+    opener = nacl.sign_open_utf8;
+    peeker = nacl.sign_peek_utf8;
+  }
+
   // Create public/secret keys {pk, sk}
   var keys = nacl.sign_keypair();
 
@@ -21,19 +40,18 @@ exports.testSigning = function(test) {
               'pk', keys.pk.length, hexify(keys.pk));
 
   // Sign a message with the secret key
-  var message = 'Hello World!';
   console.log("SIGN", message.length, message);
-  var signed_message = nacl.sign(message, keys.sk);
+  var signed_message = signer(message, keys.sk);
 
   console.log("SIGNED", signed_message.length, hexify(signed_message));
   test.notEqual(message, signed_message);
 
-  var peeked_message = nacl.sign_peek(signed_message);
+  var peeked_message = peeker(signed_message);
   console.log("PEEKED", peeked_message.length, peeked_message);
   test.equal(message, peeked_message);
 
   // Verify the (valid) signed message.
-  var checked_message = nacl.sign_open(signed_message, keys.pk);
+  var checked_message = opener(signed_message, keys.pk);
   console.log("OPENED", checked_message.length, checked_message);
   test.equal(message, checked_message);
 
@@ -48,19 +66,27 @@ exports.testSigning = function(test) {
   // Verify that gibberish signed messages do not pass.
   assert.throws(function() {
     var bad_checked_message =
-      nacl.sign_open(too_small_gibberish_signed_message, keys.pk);
+      opener(too_small_gibberish_signed_message, keys.pk);
   }, /message is smaller than the minimum signed message size/);
   assert.throws(function() {
-    var bad_checked_message = nacl.sign_open(gibberish_signed_message, keys.pk);
+    var bad_checked_message = opener(gibberish_signed_message, keys.pk);
   }, /ciphertext fails verification/);
 
   // Verify that a message signed with a different public key does not pass.
   var alt_keys = nacl.sign_keypair();
-  var alt_signed_message = nacl.sign(message, alt_keys.sk);
+  var alt_signed_message = signer(message, alt_keys.sk);
 
   assert.throws(function() {
-    var alt_checked_message = nacl.sign_open(alt_signed_message, keys.pk);
+    var alt_checked_message = opener(alt_signed_message, keys.pk);
   }, /ciphertext fails verification/);
+}
+
+/**
+ * Test the signature generation and verification using freshly generated keys.
+ */
+exports.testSigning = function(test) {
+  checkSignatureOf('Hello World!', false, test);
+  checkSignatureOf(ZEROES_64, true, test);
 
   test.done();
 };
@@ -76,7 +102,8 @@ function checkPublicKeyRoundTripOf(message, binaryMode, test) {
     unboxer = nacl.box_open_utf8;
   }
 
-  console.log("===== Planning to encrypt: '" + message + "'");
+  console.log("===== Planning to encrypt: '" + message + "' aka " +
+              hexify(message));
   var sender_keys = nacl.box_keypair(),
       recip_keys = nacl.box_keypair();
   console.log('PK SENDER sk', sender_keys.sk.length, hexify(sender_keys.sk));
@@ -101,10 +128,6 @@ function checkPublicKeyRoundTripOf(message, binaryMode, test) {
   console.log('UNBOX', unboxed_message.length, unboxed_message);
   test.equal(message, unboxed_message);
 }
-
-var ZEROES_8 = '\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000';
-var ZEROES_16 = ZEROES_8 + ZEROES_8;
-var ZEROES_64 = ZEROES_16 + ZEROES_16 + ZEROES_16 + ZEROES_16;
 
 /**
  * Test the public-key encryption and decryption using freshly generated keys
