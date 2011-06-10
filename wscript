@@ -12,26 +12,23 @@ def configure(conf):
 PLATFORM_MAP = {'x86_64': 'amd64', 'i386': 'x86', 'i686': 'x86'}
 
 def build(bld):
+  import os.path, Utils
   # nacl puts its build output in nacl/build/`hostname -s`...
-  import subprocess, os.path, Utils, platform
-  pope = subprocess.Popen(["hostname", "-s"], stdout=subprocess.PIPE)
-  hostname = pope.communicate()[0].strip()
-  libnacl_arch = PLATFORM_MAP[platform.machine()] # explode on unsupported
-  libnacl_build_dir = os.path.join('nacl/build', hostname)
-  libnacl_inc_dir = os.path.join(libnacl_build_dir, 'include', libnacl_arch)
-  libnacl_lib_dir = os.path.join(libnacl_build_dir, 'lib', libnacl_arch)
+  libnacl_build_dir = os.path.join('nacl/build')
+  libnacl_inc_dir = os.path.join(libnacl_build_dir, 'include')
+  libnacl_lib_dir = os.path.join(libnacl_build_dir)
 
   ## I tried to do something like the following; it did not go so well and
   ## there was no useful error reporting, so instead...
   #libnacl = bld(rule='./nacl/do', name='LIBNACL',
   #              target=libnacl_lib_path)
   ## this:
-  if not os.path.isdir(libnacl_lib_dir):
-    print 'Forcing nacl build (%s)' % (libnacl_arch,)
-    Utils.exec_command('cd nacl; ./do')
+  if not os.path.exists(os.path.join(libnacl_lib_dir, 'libnacl.a')):
+    print 'Forcing nacl build'
+    Utils.exec_command('cd nacl; waf')
     print 'nacl built'
   else:
-    print 'nacl already built (%s), not invoking nacl/do' % (libnacl_arch,)
+    print 'nacl already built'
   ## I think you can agree that given that "do" is a shell script, there's
   ## not really any loss of elegance by me doing the above.  That said, feel
   ## free to fix this deficiency.
@@ -39,8 +36,9 @@ def build(bld):
   obj = bld.new_task_gen('cxx', 'shlib', 'node_addon')
   obj.target = 'nacl'
   obj.source = 'src/nacl_node.cc'
-  print dir(obj)
-  obj.add_obj_file(os.path.join(libnacl_lib_dir, 'randombytes.o'))
+
+  # we used to have cram randombytes in when it was not part of the lib...
+  #obj.add_obj_file(os.path.join(libnacl_lib_dir, 'randombytes.o'))
   obj.includes = [libnacl_inc_dir]
   obj.libpath = [os.path.join('..', libnacl_lib_dir)]
   obj.staticlib = 'nacl'

@@ -10,6 +10,28 @@ var ZEROES_8 = '\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000';
 var ZEROES_16 = ZEROES_8 + ZEROES_8;
 var ZEROES_64 = ZEROES_16 + ZEROES_16 + ZEROES_16 + ZEROES_16;
 
+// Also use a stream of numbers with binary zeroes mixed in so that repetition
+//  causes a failure.  (We have had a problem where bits of the string got
+//  repeated, which is obviously not useful.)
+var BINNONREP = '\u0000\u0001\u0002\u0003\u00004\u0000' +
+                '\u0000\u0005\u0006\u0007\u00008\u0000' +
+                '\u0000\u0009\u000a\u000b\u0000c\u0000' +
+                '\u0000\u0011\u0012\u0013\u00014\u0000' +
+                '\u0000\u0015\u0016\u0017\u00018\u0000' +
+                '\u0000\u0019\u001a\u001b\u0001c\u0000' +
+                '\u0000\u0021\u0022\u0023\u00024\u0000' +
+                '\u0000\u0025\u0026\u0027\u00028\u0000' +
+                '\u0000\u0029\u002a\u002b\u0002c\u0000'; // 54 bytes
+
+var ALPHA_STEW = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' +
+                 'abcdefghijklmnopqrstuvwxyz0123456789';
+
+var JSON_STEW = JSON.stringify({
+  a: 'b',
+  c: ['d', 5, -10, {e: 'f'}],
+  g: {h: 'i', j: 12},
+});
+
 // XXX if we had non-ASCII messages tested, this would screw up as it needs to
 //  know whether to interpret as utf8 in that case...
 function hexify(bs) {
@@ -86,7 +108,11 @@ function checkSignatureOf(message, binaryMode, test) {
  */
 exports.testSigning = function(test) {
   checkSignatureOf('Hello World!', false, test);
+  checkSignatureOf(ALPHA_STEW, false, test);
+  checkSignatureOf(JSON_STEW, false, test);
+
   checkSignatureOf(ZEROES_64, true, test);
+  checkSignatureOf(BINNONREP, true, test);
 
   test.done();
 };
@@ -136,8 +162,12 @@ function checkPublicKeyRoundTripOf(message, binaryMode, test) {
 exports.testPublicKeyEncryption = function(test) {
   // Check that our round-trip actually works...
   checkPublicKeyRoundTripOf('Hello World!', false, test);
+  checkPublicKeyRoundTripOf(ALPHA_STEW, false, test);
+  checkPublicKeyRoundTripOf(JSON_STEW, false, test);
+
   // Check that we don't break on true binary strings...
   checkPublicKeyRoundTripOf(ZEROES_64, true, test);
+  checkPublicKeyRoundTripOf(BINNONREP, true, test);
 
   // The gibberish / wrong keys thing does not make a lot of sense in the
   //  encryption case, so we don't bother.
