@@ -47,6 +47,15 @@ function corruptString(msg) {
          msg.substring(indexToCorrupt + 1);
 }
 
+exports.testCustomErrors = function(test) {
+  test.notEqual(nacl.BadBoxError, undefined);
+  test.notEqual(nacl.BadSignatureError, undefined);
+  test.notEqual(nacl.BadBoxError.prototype, Error.prototype);
+  test.notEqual(nacl.BadSignatureError.prototype, Error.prototype);
+  test.notEqual(nacl.BadBoxError.prototype, nacl.BadSignatureError.prototype);
+  test.done();
+};
+
 function checkSignatureOf(message, binaryMode, test) {
   console.log("===== Planning to sign: '" + message + "' aka " +
               hexify(message));

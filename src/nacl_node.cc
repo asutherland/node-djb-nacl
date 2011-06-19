@@ -469,18 +469,25 @@ extern "C" void init(Handle<Object> target)
   // -- Define our error classes
   Local<Script> errInitScript = Script::New(String::NewSymbol(
     "function BadBoxError(msg) {this.message = msg;};\n"
-    "BadBoxError.prototype = Error.prototype;\n"
+    "BadBoxError.prototype = {__proto__: Error.prototype};\n"
     "function BadSignatureError(msg) {this.message = msg;};\n"
-    "BadSignatureError.prototype = Error.prototype;"),
+    "BadSignatureError.prototype = {__proto__: Error.prototype};"),
                                             String::NewSymbol("nacl_node.cc"));
   errInitScript->Run();
 
   Local<Object> global = Context::GetCurrent()->Global();
-  Local<Value> bbe = global->Get(String::NewSymbol("BadBoxError"));
+
+  Local<String> bbeString = String::NewSymbol("BadBoxError");
+  Local<Value> bbe = global->Get(bbeString);
   BadBoxErrorFunc = Persistent<Function>::New(Local<Function>::Cast(bbe));
-  Local<Value> bse = global->Get(String::NewSymbol("BadSignatureError"));
+
+  Local<String> bseString = String::NewSymbol("BadSignatureError");
+  Local<Value> bse = global->Get(bseString);
   BadSignatureErrorFunc = Persistent<Function>::New(Local<Function>::Cast(bse));
   
+  target->Set(bbeString, bbe);
+  target->Set(bseString, bse);
+
   NODE_SET_METHOD(target, "sign_keypair", nacl_sign_keypair);
   NODE_SET_METHOD(target, "sign", nacl_sign);
   NODE_SET_METHOD(target, "sign_open", nacl_sign_open);
