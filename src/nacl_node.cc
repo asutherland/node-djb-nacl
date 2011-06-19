@@ -469,9 +469,11 @@ extern "C" void init(Handle<Object> target)
   // -- Define our error classes
   Local<Script> errInitScript = Script::New(String::NewSymbol(
     "function BadBoxError(msg) {this.message = msg;};\n"
-    "BadBoxError.prototype = {__proto__: Error.prototype};\n"
+    "BadBoxError.prototype = {\n"
+    "  __proto__: Error.prototype, name: 'BadBoxError'};\n"
     "function BadSignatureError(msg) {this.message = msg;};\n"
-    "BadSignatureError.prototype = {__proto__: Error.prototype};"),
+    "BadSignatureError.prototype = {\n"
+    "  __proto__: Error.prototype, name: 'BadSignatureError'};"),
                                             String::NewSymbol("nacl_node.cc"));
   errInitScript->Run();
 
