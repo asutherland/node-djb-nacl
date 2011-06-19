@@ -48,11 +48,20 @@ function corruptString(msg) {
 }
 
 exports.testCustomErrors = function(test) {
+  // - make sure we exposed the types
   test.notEqual(nacl.BadBoxError, undefined);
   test.notEqual(nacl.BadSignatureError, undefined);
+  // - make sure they got their own distinct prototypes
   test.notEqual(nacl.BadBoxError.prototype, Error.prototype);
   test.notEqual(nacl.BadSignatureError.prototype, Error.prototype);
   test.notEqual(nacl.BadBoxError.prototype, nacl.BadSignatureError.prototype);
+  // - make sure that if we throw them that we get a stack on them
+  try {
+    throw new nacl.BadBoxError("just check the stack");
+  }
+  catch(ex) {
+    test.notEqual(ex.stack, null);
+  }
   test.done();
 };
 
