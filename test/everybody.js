@@ -36,7 +36,15 @@ var JSON_STEW = JSON.stringify({
 //  know whether to interpret as utf8 in that case...
 function hexify(bs) {
   var buf = new $buf.Buffer(bs, 'binary');
-  return buf.toString('hex');
+  return buf.toString('base64'); // XXX oops, 'hex' is futuristic?
+}
+
+function corruptString(msg) {
+  var indexToCorrupt = Math.floor(msg.length / 2);
+  var corruptedChar =
+    String.fromCharCode((3 ^ msg.charCodeAt(indexToCorrupt))&0xff);
+  return msg.substring(0, indexToCorrupt) + corruptedChar +
+         msg.substring(indexToCorrupt + 1);
 }
 
 function checkSignatureOf(message, binaryMode, test) {
@@ -85,11 +93,18 @@ function checkSignatureOf(message, binaryMode, test) {
   while (gibberish_signed_message.length < 64)
     gibberish_signed_message += too_small_gibberish_signed_message;
 
-  // Verify that gibberish signed messages do not pass.
+  // Verify that gibberish signed messages do not pass and throw the right things
+  assert.throws(function() {
+    var bad_checked_message =
+      opener(too_small_gibberish_signed_message, keys.pk);
+  }, nacl.BadSignatureError);
   assert.throws(function() {
     var bad_checked_message =
       opener(too_small_gibberish_signed_message, keys.pk);
   }, /message is smaller than the minimum signed message size/);
+  assert.throws(function() {
+    var bad_checked_message = opener(gibberish_signed_message, keys.pk);
+  }, nacl.BadSignatureError);
   assert.throws(function() {
     var bad_checked_message = opener(gibberish_signed_message, keys.pk);
   }, /ciphertext fails verification/);
@@ -98,6 +113,9 @@ function checkSignatureOf(message, binaryMode, test) {
   var alt_keys = nacl.sign_keypair();
   var alt_signed_message = signer(message, alt_keys.sk);
 
+  assert.throws(function() {
+    var alt_checked_message = opener(alt_signed_message, keys.pk);
+  }, nacl.BadSignatureError);
   assert.throws(function() {
     var alt_checked_message = opener(alt_signed_message, keys.pk);
   }, /ciphertext fails verification/);
@@ -153,6 +171,16 @@ function checkPublicKeyRoundTripOf(message, binaryMode, test) {
                                 sender_keys.pk, recip_keys.sk);
   console.log('UNBOX', unboxed_message.length, unboxed_message);
   test.equal(message, unboxed_message);
+
+  // -- verify we throw the right type of errors on exception.
+  // - empty ciphertext
+  assert.throws(function() {
+    unboxer("", nonce, sender_keys.pk, recip_keys.sk);
+  }, nacl.BadBoxError);
+  // - corrupt ciphertext
+  assert.throws(function() {
+    unboxer(corruptString(boxed_message), nonce, sender_keys.pk, recip_keys.sk);
+  }, nacl.BadBoxError);
 }
 
 /**

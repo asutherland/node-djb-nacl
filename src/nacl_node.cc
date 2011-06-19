@@ -51,10 +51,18 @@
 using namespace v8;
 using namespace node;
 
+static Persistent<Function> BadBoxErrorFunc;
+static Persistent<Function> BadSignatureErrorFunc;
+
 // Evil macrology 
 
 #define LEAVE_VIA_EXCEPTION(msg) \
  return ThrowException(Exception::Error(String::New(msg)));
+
+#define LEAVE_VIA_CUSTOM_EXCEPTION(errorFunc, msg)      \
+  {  Local<Value> argv[] = {String::New(msg)};          \
+  Local<Value> Err = (errorFunc)->NewInstance(1, argv); \
+  return ThrowException(Err);  }
 
 #define BAIL_IF_NOT_N_ARGS(nargs,msg) \
  if (args.Length() != nargs) \
@@ -214,7 +222,7 @@ nacl_sign_open(const Arguments &args)
   //  vulnerable to a crash-inducing unsigned wraparound.  So we explode
   //  for any input that is less than the minimum message size.
   if (sm.length() < crypto_sign_BYTES)
-    LEAVE_VIA_EXCEPTION(
+    LEAVE_VIA_CUSTOM_EXCEPTION(BadSignatureErrorFunc,
       "message is smaller than the minimum signed message size");
 
   std::string m;
@@ -222,7 +230,7 @@ nacl_sign_open(const Arguments &args)
     m = crypto_sign_open(sm, pk);
   }
   catch(const char *s) {
-    LEAVE_VIA_EXCEPTION(s);
+    LEAVE_VIA_CUSTOM_EXCEPTION(BadSignatureErrorFunc, s);
   }
 
   PREP_BIN_STR_FOR_RETURN(m);
@@ -242,7 +250,7 @@ nacl_sign_open_utf8(const Arguments &args)
   //  vulnerable to a crash-inducing unsigned wraparound.  So we explode
   //  for any input that is less than the minimum message size.
   if (sm.length() < crypto_sign_BYTES)
-    LEAVE_VIA_EXCEPTION(
+    LEAVE_VIA_CUSTOM_EXCEPTION(BadSignatureErrorFunc,
       "message is smaller than the minimum signed message size");
 
   std::string m;
@@ -250,7 +258,7 @@ nacl_sign_open_utf8(const Arguments &args)
     m = crypto_sign_open(sm, pk);
   }
   catch(const char *s) {
-    LEAVE_VIA_EXCEPTION(s);
+    LEAVE_VIA_CUSTOM_EXCEPTION(BadSignatureErrorFunc, s);
   }
 
   PREP_UTF8_STR_FOR_RETURN(m);
@@ -273,7 +281,7 @@ nacl_sign_peek(const Arguments &args)
   COERCE_OR_BAIL_BIN_STR_ARG(0, sm, "signed_message");
 
   if (sm.length() < crypto_sign_BYTES)
-    LEAVE_VIA_EXCEPTION(
+    LEAVE_VIA_CUSTOM_EXCEPTION(BadSignatureErrorFunc,
       "message is smaller than the minimum signed message size");
 
   // (We could just have sliced the input string without going to std::string
@@ -293,7 +301,7 @@ nacl_sign_peek_utf8(const Arguments &args)
   COERCE_OR_BAIL_BIN_STR_ARG(0, sm, "signed_message");
 
   if (sm.length() < crypto_sign_BYTES)
-    LEAVE_VIA_EXCEPTION(
+    LEAVE_VIA_CUSTOM_EXCEPTION(BadSignatureErrorFunc,
       "message is smaller than the minimum signed message size");
 
   // (We could just have sliced the input string without going to std::string
@@ -384,7 +392,7 @@ nacl_box_open(const Arguments &args)
     m = crypto_box_open(c, n, pk, sk);
   }
   catch(const char *s) {
-    LEAVE_VIA_EXCEPTION(s);
+    LEAVE_VIA_CUSTOM_EXCEPTION(BadBoxErrorFunc, s);
   }
 
   PREP_BIN_STR_FOR_RETURN(m);
@@ -408,7 +416,7 @@ nacl_box_open_utf8(const Arguments &args)
     m = crypto_box_open(c, n, pk, sk);
   }
   catch(const char *s) {
-    LEAVE_VIA_EXCEPTION(s);
+    LEAVE_VIA_CUSTOM_EXCEPTION(BadBoxErrorFunc, s);
   }
 
   PREP_UTF8_STR_FOR_RETURN(m);
@@ -458,6 +466,21 @@ extern "C" void init(Handle<Object> target)
 {
   HandleScope scope;
 
+  // -- Define our error classes
+  Local<Script> errInitScript = Script::New(String::NewSymbol(
+    "function BadBoxError(msg) {this.message = msg;};\n"
+    "BadBoxError.prototype = Error.prototype;\n"
+    "function BadSignatureError(msg) {this.message = msg;};\n"
+    "BadSignatureError.prototype = Error.prototype;"),
+                                            String::NewSymbol("nacl_node.cc"));
+  errInitScript->Run();
+
+  Local<Object> global = Context::GetCurrent()->Global();
+  Local<Value> bbe = global->Get(String::NewSymbol("BadBoxError"));
+  BadBoxErrorFunc = Persistent<Function>::New(Local<Function>::Cast(bbe));
+  Local<Value> bse = global->Get(String::NewSymbol("BadSignatureError"));
+  BadSignatureErrorFunc = Persistent<Function>::New(Local<Function>::Cast(bse));
+  
   NODE_SET_METHOD(target, "sign_keypair", nacl_sign_keypair);
   NODE_SET_METHOD(target, "sign", nacl_sign);
   NODE_SET_METHOD(target, "sign_open", nacl_sign_open);
