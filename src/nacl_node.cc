@@ -45,6 +45,8 @@
 #include "randombytes.h"
 #include "crypto_box.h"
 #include "crypto_sign.h"
+#include "crypto_secretbox.h"
+#include "crypto_auth.h"
 
 #include "nacl_node.h"
 
@@ -53,6 +55,8 @@ using namespace node;
 
 static Persistent<Function> BadBoxErrorFunc;
 static Persistent<Function> BadSignatureErrorFunc;
+static Persistent<Function> BadSecretBoxErrorFunc;
+static Persistent<Function> BadAuthenticatorErrorFunc;
 
 // Evil macrology 
 
@@ -423,6 +427,193 @@ nacl_box_open_utf8(const Arguments &args)
   return scope.Close(ret);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Secretbox
+
+Handle<Value>
+nacl_secretbox(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(3, "Need 3 args: message, nonce, key");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, m, "message");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, n, "nonce");
+  COERCE_OR_BAIL_BIN_STR_ARG(2, k, "key");
+
+  std::string c;
+
+  try {
+    c = crypto_secretbox(m, n, k);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_EXCEPTION(s);
+  }
+
+  PREP_BIN_STR_FOR_RETURN(c);
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_secretbox_utf8(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(3, "Need 3 args: message, nonce, key");
+  COERCE_OR_BAIL_STR_ARG(0, m, "message");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, n, "nonce");
+  COERCE_OR_BAIL_BIN_STR_ARG(2, k, "key");
+
+  std::string c;
+
+  try {
+    c = crypto_secretbox(m, n, k);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_EXCEPTION(s);
+  }
+
+  PREP_BIN_STR_FOR_RETURN(c);
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_secretbox_open(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(3,
+                     "Need 3 args: ciphertext, nonce, key");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, c, "ciphertext_message");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, n, "nonce");
+  COERCE_OR_BAIL_BIN_STR_ARG(2, k, "key");
+
+  std::string m;
+  try {
+    m = crypto_secretbox_open(c, n, k);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_CUSTOM_EXCEPTION(BadSecretBoxErrorFunc, s);
+  }
+
+  PREP_BIN_STR_FOR_RETURN(m);
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_secretbox_open_utf8(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(3,
+                     "Need 3 args: ciphertext, nonce, key");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, c, "ciphertext_message");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, n, "nonce");
+  COERCE_OR_BAIL_BIN_STR_ARG(2, k, "key");
+
+  std::string m;
+  try {
+    m = crypto_secretbox_open(c, n, k);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_CUSTOM_EXCEPTION(BadSecretBoxErrorFunc, s);
+  }
+
+  PREP_UTF8_STR_FOR_RETURN(m);
+  return scope.Close(ret);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// auth
+
+Handle<Value>
+nacl_auth(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(2, "Need 2 args: message, key");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, m, "message");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, k, "key");
+
+  std::string a;
+
+  try {
+    a = crypto_auth(m, k);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_EXCEPTION(s);
+  }
+
+  PREP_BIN_STR_FOR_RETURN(a);
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_auth_utf8(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(2, "Need 2 args: message, key");
+  COERCE_OR_BAIL_STR_ARG(0, m, "message");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, k, "key");
+
+  std::string a;
+
+  try {
+    a = crypto_auth(m, k);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_EXCEPTION(s);
+  }
+
+  PREP_BIN_STR_FOR_RETURN(a);
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_auth_verify(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(3,
+                     "Need 3 args: authenticator, message, key");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, a, "authenticator");
+  COERCE_OR_BAIL_BIN_STR_ARG(1, m, "message");
+  COERCE_OR_BAIL_BIN_STR_ARG(2, k, "key");
+
+  try {
+    crypto_auth_verify(a, m, k);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_CUSTOM_EXCEPTION(BadAuthenticatorErrorFunc, s);
+  }
+
+  return scope.Close(Undefined());
+}
+
+Handle<Value>
+nacl_auth_verify_utf8(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(3,
+                     "Need 3 args: authenticator, message, key");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, a, "authenticator");
+  COERCE_OR_BAIL_STR_ARG(1, m, "message");
+  COERCE_OR_BAIL_BIN_STR_ARG(2, k, "key");
+
+  try {
+    crypto_auth_verify(a, m, k);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_CUSTOM_EXCEPTION(BadAuthenticatorErrorFunc, s);
+  }
+
+  return scope.Close(Undefined());
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Random bytes / nonces
 
 /** Maximum number of random bytes the user can request in a go. */
 #define MAX_RANDOM_BYTES 256
@@ -459,8 +650,53 @@ nacl_box_random_nonce(const Arguments &args)
   return scope.Close(ret);
 }
 
+Handle<Value>
+nacl_secretbox_random_nonce(const Arguments &args)
+{
+  HandleScope scope;
+  char buf[crypto_secretbox_NONCEBYTES];
 
-// crypto_box_NONCEBYTES
+  BAIL_IF_NOT_N_ARGS(0, "No arguments required/supported");
+
+  randombytes(reinterpret_cast<unsigned char *>(&buf),
+              crypto_secretbox_NONCEBYTES);
+
+  PREP_BIN_CHARS_FOR_RETURN(buf, sizeof(buf)/sizeof(buf[0]));
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_secretbox_random_key(const Arguments &args)
+{
+  HandleScope scope;
+  char buf[crypto_secretbox_KEYBYTES];
+
+  BAIL_IF_NOT_N_ARGS(0, "No arguments required/supported");
+
+  randombytes(reinterpret_cast<unsigned char *>(&buf),
+              crypto_secretbox_KEYBYTES);
+
+  PREP_BIN_CHARS_FOR_RETURN(buf, sizeof(buf)/sizeof(buf[0]));
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_auth_random_key(const Arguments &args)
+{
+  HandleScope scope;
+  char buf[crypto_auth_KEYBYTES];
+
+  BAIL_IF_NOT_N_ARGS(0, "No arguments required/supported");
+
+  randombytes(reinterpret_cast<unsigned char *>(&buf),
+              crypto_auth_KEYBYTES);
+
+  PREP_BIN_CHARS_FOR_RETURN(buf, sizeof(buf)/sizeof(buf[0]));
+  return scope.Close(ret);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
 
 extern "C" void init(Handle<Object> target)
 {
@@ -473,12 +709,25 @@ extern "C" void init(Handle<Object> target)
     "  this.message = msg;};\n"
     "BadBoxError.prototype = {\n"
     "  __proto__: Error.prototype, name: 'BadBoxError'};\n"
+    ""
     "function BadSignatureError(msg) {\n"
     "  Error.captureStackTrace(this, BadSignatureError);\n"
     "  this.message = msg;};\n"
     "BadSignatureError.prototype = {\n"
-    "  __proto__: Error.prototype, name: 'BadSignatureError'};"),
-                                            String::NewSymbol("nacl_node.cc"));
+    "  __proto__: Error.prototype, name: 'BadSignatureError'};"
+    ""
+    "function BadSecretBoxError(msg) {\n"
+    "  Error.captureStackTrace(this, BadSecretBoxError);\n"
+    "  this.message = msg;};\n"
+    "BadSecretBoxError.prototype = {\n"
+    "  __proto__: Error.prototype, name: 'BadSecretBoxError'};"
+    ""
+    "function BadAuthenticatorError(msg) {\n"
+    "  Error.captureStackTrace(this, BadAuthenticatorError);\n"
+    "  this.message = msg;};\n"
+    "BadAuthenticatorError.prototype = {\n"
+    "  __proto__: Error.prototype, name: 'BadAuthenticatorError'};"
+    ), String::NewSymbol("nacl_node.cc"));
   errInitScript->Run();
 
   Local<Object> global = Context::GetCurrent()->Global();
@@ -491,9 +740,23 @@ extern "C" void init(Handle<Object> target)
   Local<Value> bse = global->Get(bseString);
   BadSignatureErrorFunc = Persistent<Function>::New(Local<Function>::Cast(bse));
   
+  Local<String> bsbeString = String::NewSymbol("BadSecretBoxError");
+  Local<Value> bsbe = global->Get(bsbeString);
+  BadSecretBoxErrorFunc = Persistent<Function>::New(Local<Function>::Cast(bsbe));
+
+  Local<String> baeString = String::NewSymbol("BadAuthenticatorError");
+  Local<Value> bae = global->Get(baeString);
+  BadAuthenticatorErrorFunc = Persistent<Function>::New(
+                                Local<Function>::Cast(bae));
+
   target->Set(bbeString, bbe);
   target->Set(bseString, bse);
+  target->Set(bsbeString, bsbe);
+  target->Set(baeString, bae);
 
+  NODE_SET_METHOD(target, "randombytes", nacl_randombytes);
+
+  // -- signing
   NODE_SET_METHOD(target, "sign_keypair", nacl_sign_keypair);
   NODE_SET_METHOD(target, "sign", nacl_sign);
   NODE_SET_METHOD(target, "sign_open", nacl_sign_open);
@@ -503,14 +766,35 @@ extern "C" void init(Handle<Object> target)
   NODE_SET_METHOD(target, "sign_open_utf8", nacl_sign_open);
   NODE_SET_METHOD(target, "sign_peek_utf8", nacl_sign_peek); // made-up-by-us
 
-
+  // -- boxing
   NODE_SET_METHOD(target, "box_keypair", nacl_box_keypair);
   NODE_SET_METHOD(target, "box", nacl_box);
   NODE_SET_METHOD(target, "box_open", nacl_box_open);
 
+  NODE_SET_METHOD(target, "box_random_nonce", nacl_box_random_nonce); // made-up
+
   NODE_SET_METHOD(target, "box_utf8", nacl_box_utf8);
   NODE_SET_METHOD(target, "box_open_utf8", nacl_box_open_utf8);
 
-  NODE_SET_METHOD(target, "randombytes", nacl_randombytes);
-  NODE_SET_METHOD(target, "box_random_nonce", nacl_box_random_nonce); // made-up
+  // -- secretboxing
+  NODE_SET_METHOD(target, "secretbox", nacl_secretbox);
+  NODE_SET_METHOD(target, "secretbox_open", nacl_secretbox_open);
+
+  NODE_SET_METHOD(target, "secretbox_random_nonce",
+                          nacl_secretbox_random_nonce); // made-up
+  NODE_SET_METHOD(target, "secretbox_random_key",
+                          nacl_secretbox_random_key); // made-up
+
+  NODE_SET_METHOD(target, "secretbox_utf8", nacl_secretbox_utf8);
+  NODE_SET_METHOD(target, "secretbox_open_utf8", nacl_secretbox_open_utf8);
+
+  // -- authing
+  NODE_SET_METHOD(target, "auth", nacl_auth);
+  NODE_SET_METHOD(target, "auth_verify", nacl_auth_verify);
+
+  NODE_SET_METHOD(target, "auth_random_key",
+                          nacl_auth_random_key); // made-up
+
+  NODE_SET_METHOD(target, "auth_utf8", nacl_auth_utf8);
+  NODE_SET_METHOD(target, "auth_verify_utf8", nacl_auth_verify_utf8);
 };

@@ -51,10 +51,29 @@ exports.testCustomErrors = function(test) {
   // - make sure we exposed the types
   test.notEqual(nacl.BadBoxError, undefined);
   test.notEqual(nacl.BadSignatureError, undefined);
+  test.notEqual(nacl.BadSecretBoxError, undefined);
+  test.notEqual(nacl.BadAuthenticatorError, undefined);
   // - make sure they got their own distinct prototypes
   test.notEqual(nacl.BadBoxError.prototype, Error.prototype);
   test.notEqual(nacl.BadSignatureError.prototype, Error.prototype);
-  test.notEqual(nacl.BadBoxError.prototype, nacl.BadSignatureError.prototype);
+  test.notEqual(nacl.BadSecretBoxError.prototype, Error.prototype);
+  test.notEqual(nacl.BadAuthenticatorError.prototype, Error.prototype);
+
+  test.notEqual(nacl.BadBoxError.prototype,
+                nacl.BadSignatureError.prototype);
+  test.notEqual(nacl.BadBoxError.prototype,
+                nacl.BadSecretBoxError.prototype);
+  test.notEqual(nacl.BadBoxError.prototype,
+                nacl.BadAuthenticatorError.prototype);
+
+  test.notEqual(nacl.BadSignatureError.prototype,
+                nacl.BadSecretBoxError.prototype);
+  test.notEqual(nacl.BadSignatureError.prototype,
+                nacl.BadAuthenticatorError.prototype);
+
+  test.notEqual(nacl.BadSecretBoxError.prototype,
+                nacl.BadAuthenticatorError.prototype);
+
   // - make sure that if we throw them that we get a stack on them
   try {
     throw new nacl.BadBoxError("just check the stack");
@@ -153,7 +172,7 @@ exports.testSigning = function(test) {
   test.done();
 };
 
-function checkPublicKeyRoundTripOf(message, binaryMode, test) {
+function checkBoxRoundTripOf(message, binaryMode, test) {
   var boxer, unboxer;
   if (binaryMode) {
     boxer = nacl.box;
@@ -168,10 +187,10 @@ function checkPublicKeyRoundTripOf(message, binaryMode, test) {
               hexify(message));
   var sender_keys = nacl.box_keypair(),
       recip_keys = nacl.box_keypair();
-  console.log('PK SENDER sk', sender_keys.sk.length, hexify(sender_keys.sk));
-  console.log('PK SENDER pk', sender_keys.pk.length, hexify(sender_keys.pk));
-  console.log('PK RECIP sk', recip_keys.sk.length, hexify(recip_keys.sk));
-  console.log('PK RECIP pk', recip_keys.pk.length, hexify(recip_keys.pk));
+  console.log('B SENDER sk', sender_keys.sk.length, hexify(sender_keys.sk));
+  console.log('B SENDER pk', sender_keys.pk.length, hexify(sender_keys.pk));
+  console.log('B RECIP sk', recip_keys.sk.length, hexify(recip_keys.sk));
+  console.log('B RECIP pk', recip_keys.pk.length, hexify(recip_keys.pk));
 
   // Random nonces are unlikely to collide and we are less likely to violate
   //  the requirement forbidding reusing nonces for a given sender/recip pair
@@ -205,18 +224,125 @@ function checkPublicKeyRoundTripOf(message, binaryMode, test) {
  * Test the public-key encryption and decryption using freshly generated keys
  * and nonces.
  */
-exports.testPublicKeyEncryption = function(test) {
+exports.testBoxing = function(test) {
   // Check that our round-trip actually works...
-  checkPublicKeyRoundTripOf('Hello World!', false, test);
-  checkPublicKeyRoundTripOf(ALPHA_STEW, false, test);
-  checkPublicKeyRoundTripOf(JSON_STEW, false, test);
+  checkBoxRoundTripOf('Hello World!', false, test);
+  checkBoxRoundTripOf(ALPHA_STEW, false, test);
+  checkBoxRoundTripOf(JSON_STEW, false, test);
 
   // Check that we don't break on true binary strings...
-  checkPublicKeyRoundTripOf(ZEROES_64, true, test);
-  checkPublicKeyRoundTripOf(BINNONREP, true, test);
+  checkBoxRoundTripOf(ZEROES_64, true, test);
+  checkBoxRoundTripOf(BINNONREP, true, test);
 
   // The gibberish / wrong keys thing does not make a lot of sense in the
   //  encryption case, so we don't bother.
+
+  test.done();
+};
+
+function checkSecretBoxRoundTripOf(message, binaryMode, test) {
+  var boxer, unboxer;
+  if (binaryMode) {
+    boxer = nacl.secretbox;
+    unboxer = nacl.secretbox_open;
+  }
+  else {
+    boxer = nacl.secretbox_utf8;
+    unboxer = nacl.secretbox_open_utf8;
+  }
+
+  console.log("===== Planning to encrypt: '" + message + "' aka " +
+              hexify(message));
+
+  var key = nacl.secretbox_random_key();
+  console.log('KEY', hexify(key));
+  var nonce = nacl.secretbox_random_nonce();
+  console.log('NONCE', hexify(nonce));
+
+  console.log('SBOX', message.length, message);
+  var boxed_message = boxer(message, nonce, key);
+
+  console.log('SBOXED', boxed_message.length, hexify(boxed_message));
+  test.notEqual(message, boxed_message);
+
+  var unboxed_message = unboxer(boxed_message, nonce, key);
+  console.log('SUNBOX', unboxed_message.length, unboxed_message);
+  test.equal(message, unboxed_message);
+
+  // -- verify we throw the right type of errors on exception.
+  // - empty ciphertext
+  assert.throws(function() {
+    unboxer("", nonce, key);
+  }, nacl.BadSecretBoxError);
+  // - corrupt ciphertext
+  assert.throws(function() {
+    unboxer(corruptString(boxed_message), nonce, key);
+  }, nacl.BadSecretBoxError);
+}
+
+exports.testSecretBoxing = function(test) {
+  checkSecretBoxRoundTripOf('Hello World!', false, test);
+  checkSecretBoxRoundTripOf(ALPHA_STEW, false, test);
+  checkSecretBoxRoundTripOf(JSON_STEW, false, test);
+
+  checkSecretBoxRoundTripOf(ZEROES_64, true, test);
+  checkSecretBoxRoundTripOf(BINNONREP, true, test);
+
+  test.done();
+};
+
+function checkAuthenticatorFor(message, binaryMode, test) {
+  var auther, verifier;
+  if (binaryMode) {
+    auther = nacl.auth;
+    verifier = nacl.auth_verify;
+  }
+  else {
+    auther = nacl.auth_utf8;
+    verifier = nacl.auth_verify_utf8;
+  }
+
+  console.log("===== Planning to authenticate: '" + message + "' aka " +
+              hexify(message));
+
+  var key = nacl.auth_random_key();
+  console.log('KEY', hexify(key));
+
+  console.log('AUTH', message.length, message);
+  var authenticator = auther(message, key);
+
+  console.log('AUTHED', authenticator.length, hexify(authenticator));
+  // this would be weird...
+  test.notEqual(message, authenticator);
+
+  verifier(authenticator, message, key); // (throws)
+
+  // -- verify we throw the right type of errors on exception.
+  // - empty authenticator
+  assert.throws(function() {
+    verifier("", message, key);
+  }, nacl.BadAuthenticatorError);
+  // - empty message
+  assert.throws(function() {
+    verifier(authenticator, "", key);
+  }, nacl.BadAuthenticatorError);
+  // - corrupt authenticator
+  assert.throws(function() {
+    verifier(corruptString(authenticator), message, key);
+  }, nacl.BadAuthenticatorError);
+  // - corrupt message
+  assert.throws(function() {
+    verifier(authenticator, corruptString(message), key);
+  }, nacl.BadAuthenticatorError);
+}
+
+exports.testAuthenticators = function(test) {
+  checkAuthenticatorFor('Hello World!', false, test);
+  checkAuthenticatorFor(ALPHA_STEW, false, test);
+  checkAuthenticatorFor(JSON_STEW, false, test);
+
+  checkAuthenticatorFor(ZEROES_64, true, test);
+  checkAuthenticatorFor(BINNONREP, true, test);
 
   test.done();
 };
