@@ -698,6 +698,10 @@ nacl_auth_random_key(const Arguments &args)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#define NAMED_CONSTANT(target, name, constant) \
+  (target)->Set(String::NewSymbol(name), Integer::New(constant), \
+                static_cast<PropertyAttribute>(ReadOnly|DontDelete))
+
 extern "C" void init(Handle<Object> target)
 {
   HandleScope scope;
@@ -767,6 +771,9 @@ extern "C" void init(Handle<Object> target)
   NODE_SET_METHOD(target, "sign_peek_utf8", nacl_sign_peek); // made-up-by-us
 
   // -- boxing
+  NAMED_CONSTANT(target, "box_PUBLICKEYBYTES", crypto_box_PUBLICKEYBYTES);
+  NAMED_CONSTANT(target, "box_SECRETKEYBYTES", crypto_box_SECRETKEYBYTES);
+
   NODE_SET_METHOD(target, "box_keypair", nacl_box_keypair);
   NODE_SET_METHOD(target, "box", nacl_box);
   NODE_SET_METHOD(target, "box_open", nacl_box_open);
@@ -777,6 +784,8 @@ extern "C" void init(Handle<Object> target)
   NODE_SET_METHOD(target, "box_open_utf8", nacl_box_open_utf8);
 
   // -- secretboxing
+  NAMED_CONSTANT(target, "secretbox_KEYBYTES", crypto_secretbox_KEYBYTES);
+
   NODE_SET_METHOD(target, "secretbox", nacl_secretbox);
   NODE_SET_METHOD(target, "secretbox_open", nacl_secretbox_open);
 
@@ -789,6 +798,8 @@ extern "C" void init(Handle<Object> target)
   NODE_SET_METHOD(target, "secretbox_open_utf8", nacl_secretbox_open_utf8);
 
   // -- authing
+  NAMED_CONSTANT(target, "auth_KEYBYTES", crypto_auth_KEYBYTES);
+
   NODE_SET_METHOD(target, "auth", nacl_auth);
   NODE_SET_METHOD(target, "auth_verify", nacl_auth_verify);
 

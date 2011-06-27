@@ -346,3 +346,16 @@ exports.testAuthenticators = function(test) {
 
   test.done();
 };
+
+/**
+ * Make sure we expose our constants and they are correct.  The constants
+ *  are accordingly hard-coded here.
+ */
+exports.testConstants = function(test) {
+  test.equal(nacl.box_PUBLICKEYBYTES, 32);
+  test.equal(nacl.box_SECRETKEYBYTES, 32);
+  test.equal(nacl.secretbox_KEYBYTES, 32);
+  test.equal(nacl.auth_KEYBYTES, 32);
+
+  test.done();
+};
