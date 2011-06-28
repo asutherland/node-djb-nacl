@@ -47,6 +47,7 @@
 #include "crypto_sign.h"
 #include "crypto_secretbox.h"
 #include "crypto_auth.h"
+#include "crypto_hash.h"
 
 #include "nacl_node.h"
 
@@ -151,6 +152,10 @@ static Persistent<Function> BadAuthenticatorErrorFunc;
   Local<Value> ret = Encode(strvar.data(), strvar.length(), UTF8)
 #define PREP_BIN_STR_FOR_RETURN(strvar) \
   Local<Value> ret = Encode(strvar.data(), strvar.length(), BINARY)
+
+#define PREP_TRUNCATED_BIN_STR_FOR_RETURN(strvar, truncateTo)           \
+  Local<Value> ret = Encode(strvar.data(), truncateTo, BINARY)
+
 
 #define PREP_BIN_CHARS_FOR_RETURN(cbuf, clen) \
   Local<Value> ret = Encode(cbuf, clen)
@@ -611,6 +616,54 @@ nacl_auth_verify_utf8(const Arguments &args)
   return scope.Close(Undefined());
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Hash
+
+Handle<Value>
+nacl_hash512_256(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(1,
+                     "Need 1 arg: message");
+  COERCE_OR_BAIL_BIN_STR_ARG(0, m, "message");
+
+  std::string h;
+
+  try {
+    h = crypto_hash(m);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_EXCEPTION(s);
+  }
+
+  PREP_TRUNCATED_BIN_STR_FOR_RETURN(h, 32);
+  return scope.Close(ret);
+}
+
+Handle<Value>
+nacl_hash512_256_utf8(const Arguments &args)
+{
+  HandleScope scope;
+
+  BAIL_IF_NOT_N_ARGS(1,
+                     "Need 1 arg: message");
+  COERCE_OR_BAIL_STR_ARG(0, m, "message");
+
+  std::string h;
+
+  try {
+    h = crypto_hash(m);
+  }
+  catch(const char *s) {
+    LEAVE_VIA_EXCEPTION(s);
+  }
+
+  PREP_TRUNCATED_BIN_STR_FOR_RETURN(h, 32);
+  return scope.Close(ret);
+}
+
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Random bytes / nonces
@@ -808,4 +861,13 @@ extern "C" void init(Handle<Object> target)
 
   NODE_SET_METHOD(target, "auth_utf8", nacl_auth_utf8);
   NODE_SET_METHOD(target, "auth_verify_utf8", nacl_auth_verify_utf8);
+
+  // -- hash
+  // we are exposing a 512 truncating to 256 mainly because:
+  // a) I want a 32-byte hash, not a 64-byte hash.
+  // b) I am being lazy and the C++ binding only exposes sha512.
+  // c) nacl internally uses a 512-truncated-to-256 elsewhere, so this is not a
+  //     particularly risky primitive to expose.
+  NODE_SET_METHOD(target, "hash512_256", nacl_hash512_256);
+  NODE_SET_METHOD(target, "hash512_256_utf8", nacl_hash512_256_utf8);
 };

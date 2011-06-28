@@ -1,5 +1,5 @@
 var nacl = require('nacl');
-var $buf = require('buffer');
+var $buf = require('buffer'), $crypto = require('crypto');
 // nodeunit actually has a different signature for throws from assert, and
 //  assert's is much better.
 var assert = require('assert');
@@ -356,6 +356,20 @@ exports.testConstants = function(test) {
   test.equal(nacl.box_SECRETKEYBYTES, 32);
   test.equal(nacl.secretbox_KEYBYTES, 32);
   test.equal(nacl.auth_KEYBYTES, 32);
+
+  test.done();
+};
+
+function checkHashFor(msg, binaryMode, test) {
+  var nodeHasher = $crypto.createHash('sha512');
+  nodeHasher.update(msg);
+  var naclHasher = binaryMode ? nacl.hash512_256 : nacl.hash512_256_utf8;
+
+  test.equal(naclHasher(msg), nodeHasher.digest('binary').substring(0, 32));
+}
+exports.testHash = function(test) {
+  checkHashFor('Hello World!', false, test);
+  checkHashFor(ALPHA_STEW, true, test);
 
   test.done();
 };
