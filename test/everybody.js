@@ -29,7 +29,17 @@ var NOT_VALID_UTF8 =
   '\u00ff\u00fe\u00fd\u00fc\u00fb\u00fa\u00f9\u00f8\u0000' +
   '\u00f7\u00f6\u00f5\u00f4\u00f3\u00f2\u00f1\u00f0\u0000';
 
-var VALID_UTF8_FROM_INVALID = JSON.stringify({s: NOT_VALID_UTF8});
+// Have a string that should be legally UTF8 encoded from our invalid UTF8
+var VALID_UTF8_FROM_INVALID_UTF8 = JSON.stringify({s: NOT_VALID_UTF8});
+
+
+// A string of 'high' unicode so that interpretation as 8-bit binary data
+//  would be corrupting.
+var SOME_UTF16 = '\u0100\u0101\u0102\u0103\u0104\u0105\u0106\u0107' +
+                 '\u0108\u0109\u010a\u010b\u010c\u010d\u010e\u010f' +
+                 '\u0110\u0111\u0112\u0113\u0114\u0115\u0116\u0117' +
+                 '\u0118\u0119\u011a\u011b\u011c\u011d\u011e\u011f' +
+                 '\u0120\u0121\u0122\u0123\u0124';
 
 var ALPHA_STEW = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' +
                  'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -180,7 +190,8 @@ exports.testSigning = function(test) {
   checkSignatureOf('Hello World!', false, test);
   checkSignatureOf(ALPHA_STEW, false, test);
   checkSignatureOf(JSON_STEW, false, test);
-  checkSignatureOf(VALID_UTF8_FROM_INVALID, false, test);
+  checkSignatureOf(VALID_UTF8_FROM_INVALID_UTF8, false, test);
+  checkSignatureOf(SOME_UTF16, false, test);
 
   checkSignatureOf(ZEROES_64, true, test);
   checkSignatureOf(BINNONREP, true, test);
@@ -251,6 +262,8 @@ exports.testBoxing = function(test) {
   checkBoxRoundTripOf('Hello World!', false, test);
   checkBoxRoundTripOf(ALPHA_STEW, false, test);
   checkBoxRoundTripOf(JSON_STEW, false, test);
+  checkBoxRoundTripOf(VALID_UTF8_FROM_INVALID_UTF8, false, test);
+  checkBoxRoundTripOf(SOME_UTF16, false, test);
 
   // Check that we don't break on true binary strings...
   checkBoxRoundTripOf(ZEROES_64, true, test);
@@ -312,9 +325,12 @@ exports.testSecretBoxing = function(test) {
   checkSecretBoxRoundTripOf('Hello World!', false, test);
   checkSecretBoxRoundTripOf(ALPHA_STEW, false, test);
   checkSecretBoxRoundTripOf(JSON_STEW, false, test);
+  checkSecretBoxRoundTripOf(VALID_UTF8_FROM_INVALID_UTF8, false, test);
+  checkSecretBoxRoundTripOf(SOME_UTF16, false, test);
 
   checkSecretBoxRoundTripOf(ZEROES_64, true, test);
   checkSecretBoxRoundTripOf(BINNONREP, true, test);
+  checkSecretBoxRoundTripOf(NOT_VALID_UTF8, true, test);
 
   test.done();
 };
@@ -372,9 +388,12 @@ exports.testAuthenticators = function(test) {
   checkAuthenticatorFor('Hello World!', false, test);
   checkAuthenticatorFor(ALPHA_STEW, false, test);
   checkAuthenticatorFor(JSON_STEW, false, test);
+  checkAuthenticatorFor(VALID_UTF8_FROM_INVALID_UTF8, false, test);
+  checkAuthenticatorFor(SOME_UTF16, false, test);
 
   checkAuthenticatorFor(ZEROES_64, true, test);
   checkAuthenticatorFor(BINNONREP, true, test);
+  checkAuthenticatorFor(NOT_VALID_UTF8, true, test);
 
   test.done();
 };
