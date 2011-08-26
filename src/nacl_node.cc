@@ -819,9 +819,9 @@ extern "C" void init(Handle<Object> target)
   NODE_SET_METHOD(target, "sign_open", nacl_sign_open);
   NODE_SET_METHOD(target, "sign_peek", nacl_sign_peek); // made-up-by-us
 
-  NODE_SET_METHOD(target, "sign_utf8", nacl_sign);
-  NODE_SET_METHOD(target, "sign_open_utf8", nacl_sign_open);
-  NODE_SET_METHOD(target, "sign_peek_utf8", nacl_sign_peek); // made-up-by-us
+  NODE_SET_METHOD(target, "sign_utf8", nacl_sign_utf8);
+  NODE_SET_METHOD(target, "sign_open_utf8", nacl_sign_open_utf8);
+  NODE_SET_METHOD(target, "sign_peek_utf8", nacl_sign_peek_utf8); // made-up
 
   // -- boxing
   NAMED_CONSTANT(target, "box_PUBLICKEYBYTES", crypto_box_PUBLICKEYBYTES);

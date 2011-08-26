@@ -23,6 +23,14 @@ var BINNONREP = '\u0000\u0001\u0002\u0003\u00004\u0000' +
                 '\u0000\u0025\u0026\u0027\u00028\u0000' +
                 '\u0000\u0029\u002a\u002b\u0002c\u0000'; // 54 bytes
 
+// Have a string that uses byte sequences that are not remotely valid utf8
+//  and so interpretation as utf8 would be fatal.
+var NOT_VALID_UTF8 =
+  '\u00ff\u00fe\u00fd\u00fc\u00fb\u00fa\u00f9\u00f8\u0000' +
+  '\u00f7\u00f6\u00f5\u00f4\u00f3\u00f2\u00f1\u00f0\u0000';
+
+var VALID_UTF8_FROM_INVALID = JSON.stringify({s: NOT_VALID_UTF8});
+
 var ALPHA_STEW = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' +
                  'abcdefghijklmnopqrstuvwxyz0123456789';
 
@@ -85,8 +93,12 @@ exports.testCustomErrors = function(test) {
 };
 
 function checkSignatureOf(message, binaryMode, test) {
-  console.log("===== Planning to sign: '" + message + "' aka " +
-              hexify(message));
+  if (!binaryMode)
+    console.log("\n===== Planning to sign: '" + message +
+                "'\n       aka " + hexify(message));
+  else
+    console.log("\n===== Planning to sign: " + hexify(message));
+
   var signer, opener, peeker;
   if (binaryMode) {
     signer = nacl.sign;
@@ -107,19 +119,22 @@ function checkSignatureOf(message, binaryMode, test) {
               'pk', keys.pk.length, hexify(keys.pk));
 
   // Sign a message with the secret key
-  console.log("SIGN", message.length, message);
+  console.log("SIGN  ", message.length,
+              binaryMode ? hexify(message) : message);
   var signed_message = signer(message, keys.sk);
 
   console.log("SIGNED", signed_message.length, hexify(signed_message));
   test.notEqual(message, signed_message);
 
   var peeked_message = peeker(signed_message);
-  console.log("PEEKED", peeked_message.length, peeked_message);
+  console.log("PEEKED", peeked_message.length,
+              binaryMode ? hexify(peeked_message) : peeked_message);
   test.equal(message, peeked_message);
 
   // Verify the (valid) signed message.
   var checked_message = opener(signed_message, keys.pk);
-  console.log("OPENED", checked_message.length, checked_message);
+  console.log("OPENED", checked_message.length,
+              binaryMode ? hexify(checked_message) : checked_message);
   test.equal(message, checked_message);
 
   // The minimum message size is 64 bytes because of the hash and the signature,
@@ -165,9 +180,11 @@ exports.testSigning = function(test) {
   checkSignatureOf('Hello World!', false, test);
   checkSignatureOf(ALPHA_STEW, false, test);
   checkSignatureOf(JSON_STEW, false, test);
+  checkSignatureOf(VALID_UTF8_FROM_INVALID, false, test);
 
   checkSignatureOf(ZEROES_64, true, test);
   checkSignatureOf(BINNONREP, true, test);
+  checkSignatureOf(NOT_VALID_UTF8, true, test);
 
   test.done();
 };
@@ -183,8 +200,11 @@ function checkBoxRoundTripOf(message, binaryMode, test) {
     unboxer = nacl.box_open_utf8;
   }
 
-  console.log("===== Planning to encrypt: '" + message + "' aka " +
-              hexify(message));
+  if (!binaryMode)
+    console.log("\n===== Planning to encrypt: '" + message +
+                "'\n       aka " + hexify(message));
+  else
+    console.log("\n===== Planning to encrypt: " + hexify(message));
   var sender_keys = nacl.box_keypair(),
       recip_keys = nacl.box_keypair();
   console.log('B SENDER sk', sender_keys.sk.length, hexify(sender_keys.sk));
@@ -198,7 +218,8 @@ function checkBoxRoundTripOf(message, binaryMode, test) {
   var nonce = nacl.box_random_nonce();
   console.log('NONCE', hexify(nonce));
 
-  console.log('BOX', message.length, message);
+  console.log('BOX  ', message.length,
+              binaryMode ? hexify(message) : message);
   var boxed_message = boxer(message, nonce,
                             recip_keys.pk, sender_keys.sk);
   console.log('BOXED', boxed_message.length, hexify(boxed_message));
@@ -206,7 +227,8 @@ function checkBoxRoundTripOf(message, binaryMode, test) {
 
   var unboxed_message = unboxer(boxed_message, nonce,
                                 sender_keys.pk, recip_keys.sk);
-  console.log('UNBOX', unboxed_message.length, unboxed_message);
+  console.log('UNBOX', unboxed_message.length,
+              binaryMode ? hexify(unboxed_message) : unboxed_message);
   test.equal(message, unboxed_message);
 
   // -- verify we throw the right type of errors on exception.
@@ -233,6 +255,7 @@ exports.testBoxing = function(test) {
   // Check that we don't break on true binary strings...
   checkBoxRoundTripOf(ZEROES_64, true, test);
   checkBoxRoundTripOf(BINNONREP, true, test);
+  checkBoxRoundTripOf(NOT_VALID_UTF8, true, test);
 
   // The gibberish / wrong keys thing does not make a lot of sense in the
   //  encryption case, so we don't bother.
@@ -251,22 +274,27 @@ function checkSecretBoxRoundTripOf(message, binaryMode, test) {
     unboxer = nacl.secretbox_open_utf8;
   }
 
-  console.log("===== Planning to encrypt: '" + message + "' aka " +
-              hexify(message));
+  if (!binaryMode)
+    console.log("\n===== Planning to sbox: '" + message +
+                "'\n       aka " + hexify(message));
+  else
+    console.log("\n===== Planning to sbox: " + hexify(message));
 
   var key = nacl.secretbox_random_key();
   console.log('KEY', hexify(key));
   var nonce = nacl.secretbox_random_nonce();
   console.log('NONCE', hexify(nonce));
 
-  console.log('SBOX', message.length, message);
+  console.log('SBOX  ', message.length,
+              binaryMode ? hexify(message) : message);
   var boxed_message = boxer(message, nonce, key);
 
   console.log('SBOXED', boxed_message.length, hexify(boxed_message));
   test.notEqual(message, boxed_message);
 
   var unboxed_message = unboxer(boxed_message, nonce, key);
-  console.log('SUNBOX', unboxed_message.length, unboxed_message);
+  console.log('SUNBOX', unboxed_message.length,
+              binaryMode ? hexify(unboxed_message) : unboxed_message);
   test.equal(message, unboxed_message);
 
   // -- verify we throw the right type of errors on exception.
@@ -302,13 +330,17 @@ function checkAuthenticatorFor(message, binaryMode, test) {
     verifier = nacl.auth_verify_utf8;
   }
 
-  console.log("===== Planning to authenticate: '" + message + "' aka " +
-              hexify(message));
+  if (!binaryMode)
+    console.log("\n===== Planning to authenticate: '" + message +
+                "'\n       aka " + hexify(message));
+  else
+    console.log("\n===== Planning to authenticate: " + hexify(message));
 
   var key = nacl.auth_random_key();
   console.log('KEY', hexify(key));
 
-  console.log('AUTH', message.length, message);
+  console.log('AUTH  ', message.length,
+              binaryMode ? hexify(message) : message);
   var authenticator = auther(message, key);
 
   console.log('AUTHED', authenticator.length, hexify(authenticator));
