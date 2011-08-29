@@ -309,7 +309,6 @@ function checkSecretBoxRoundTripOf(message, binaryMode, test) {
   console.log('SUNBOX', unboxed_message.length,
               binaryMode ? hexify(unboxed_message) : unboxed_message);
   test.equal(message, unboxed_message);
-
   // -- verify we throw the right type of errors on exception.
   // - empty ciphertext
   assert.throws(function() {
