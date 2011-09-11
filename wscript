@@ -25,7 +25,7 @@ def build(bld):
   ## this:
   if not os.path.exists(os.path.join(libnacl_lib_dir, 'libnacl.a')):
     print 'Forcing nacl build'
-    Utils.exec_command('cd nacl; waf configure; waf build')
+    Utils.exec_command('cd nacl; ./waf configure; ./waf build')
     print 'nacl built'
   else:
     print 'nacl already built'
