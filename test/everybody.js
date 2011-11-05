@@ -246,10 +246,12 @@ function checkBoxRoundTripOf(message, binaryMode, test) {
   // - empty ciphertext
   assert.throws(function() {
     unboxer("", nonce, sender_keys.pk, recip_keys.sk);
+    console.log("  badness: that should have thrown on empty ciphertext");
   }, nacl.BadBoxError);
   // - corrupt ciphertext
   assert.throws(function() {
     unboxer(corruptString(boxed_message), nonce, sender_keys.pk, recip_keys.sk);
+    console.log("  badness: that should have thrown on corrupt ciphertext");
   }, nacl.BadBoxError);
 }
 
@@ -313,10 +315,12 @@ function checkSecretBoxRoundTripOf(message, binaryMode, test) {
   // - empty ciphertext
   assert.throws(function() {
     unboxer("", nonce, key);
+    console.log("  badness: that should have thrown on empty ciphertext");
   }, nacl.BadSecretBoxError);
   // - corrupt ciphertext
   assert.throws(function() {
     unboxer(corruptString(boxed_message), nonce, key);
+    console.log("  badness: that should have thrown on corrupt ciphertext");
   }, nacl.BadSecretBoxError);
 }
 
