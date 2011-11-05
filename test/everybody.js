@@ -61,8 +61,11 @@ function corruptString(msg) {
   var indexToCorrupt = Math.floor(msg.length / 2);
   var corruptedChar =
     String.fromCharCode((3 ^ msg.charCodeAt(indexToCorrupt))&0xff);
-  return msg.substring(0, indexToCorrupt) + corruptedChar +
-         msg.substring(indexToCorrupt + 1);
+  var corruptedString = msg.substring(0, indexToCorrupt) + corruptedChar +
+                          msg.substring(indexToCorrupt + 1);
+  if (corruptedString === msg)
+    throw new Error("We failed to corrupt the string somehow!");
+  return corruptedString;
 }
 
 exports.testCustomErrors = function(test) {
